@@ -1,0 +1,45 @@
+#version 460
+
+layout(rgba32f, binding = 1) readonly uniform image2D in_texture;
+layout(rgba32f, binding = 2) writeonly uniform image2D out_texture;
+layout(local_size_x = 32, local_size_y = 32) in;
+
+vec4 boxBlur(int size, ivec2 center)
+{
+    vec4 sum = vec4(0.0);
+    for (int x = -size; x <= size; x++)
+    {
+        for (int y = -size; y <= size; y++)
+        {
+            sum += imageLoad(in_texture, (center + ivec2(x, y)) % imageSize(in_texture));
+        }
+    }
+    int dim = size * 2 + 1;
+    sum /= vec4(dim * dim);
+    return sum;
+}
+
+void main()
+{
+    // Parameters
+    //float darken_rate = 0.004;
+    float darken_rate = 0.004;
+    float mix_rate = 0.9;
+
+    // Bail out
+    ivec2 center = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(in_texture);
+    if (center.x < 0 || center.y < 0 || center.x >= size.x || center.y >= size.y)
+        return;
+
+    // Blur
+    vec4 original = imageLoad(in_texture, center);
+    vec4 result = boxBlur(1, center);
+
+    // Blend and darken
+    result = mix(original, result, mix_rate);
+    result = max(vec4(0), result - vec4(darken_rate));
+    result.a = 1.0;
+
+    imageStore(out_texture, center, result);
+}

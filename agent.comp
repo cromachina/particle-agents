@@ -1,0 +1,134 @@
+#version 460
+
+const float PI = 3.1415926535897932384626433832795;
+
+struct Agent
+{
+    vec2 position;
+    float direction;
+    int id;
+};
+
+layout(std430, binding = 0) buffer agent_buffer
+{
+    Agent agents[];
+};
+layout(rgba32f, binding = 1) readonly uniform image2D in_texture;
+layout(rgba32f, binding = 2) writeonly uniform image2D out_texture;
+uniform uint frame;
+layout(local_size_x = 32) in;
+
+uint hash(uint state)
+{
+    state ^= 2747636419u;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    return state;
+}
+
+float make_float(uint m)
+{
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+
+    float  f = uintBitsToFloat( m );       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
+}
+
+vec2 to_vec(float dir)
+{
+    return vec2(cos(dir), sin(dir));
+}
+
+float to_angle(vec2 dir)
+{
+    return atan(dir.y, dir.x);
+}
+
+vec4 field_mask(int id)
+{
+    vec4 res = vec4(-1,-1,-1,1);
+    switch (id)
+    {
+        case 0: res.r = 1; break;
+        case 1: res.g = 1; break;
+        case 2: res.b = 1; break;
+    }
+    return res;
+}
+
+vec2 sense(Agent agent, float dist, float look_angle)
+{
+    vec2 look_dir = to_vec(agent.direction + look_angle);
+    vec2 sense_pos = agent.position + dist * look_dir;
+    ivec2 image_pos = ivec2(sense_pos) % imageSize(in_texture);
+    vec4 color_intensity = imageLoad(in_texture, image_pos);
+    vec4 mask = field_mask(agent.id).zxyw;
+    vec4 c = color_intensity * mask;
+    float intensity = c.r + c.g + c.b;
+    return look_dir * max(intensity, 0.1);
+}
+
+float sum_comps(vec4 c)
+{
+    return c.r + c.g + c.b;
+}
+
+float sample_at(vec2 position, vec4 mask)
+{
+    ivec2 image_pos = ivec2(position) % imageSize(in_texture);
+    return sum_comps(imageLoad(in_texture, image_pos) * mask);
+}
+
+vec2 grad(Agent agent)
+{
+    float delta = 1.0;
+    vec4 mask = field_mask(agent.id).zxyw;
+    float ndx = sample_at(agent.position + vec2(-delta, 0.0), mask);
+    float dx = sample_at(agent.position + vec2(delta, 0.0), mask);
+    float ndy = sample_at(agent.position + vec2(0.0, -delta), mask);
+    float dy = sample_at(agent.position + vec2(0.0, delta), mask);
+    return vec2(ndx - dx, ndy - dy);
+}
+
+void main()
+{
+    // Parameters
+    uint max_agents = 2000000;
+    float spread = 1.5;
+    float dist = 10;
+    float speed = 5.5;
+    float random_rate = 1.1;
+
+    // Bail out
+    uint id = gl_GlobalInvocationID.x;
+    if (id > max_agents)
+        return;
+
+    // Agent looking for interesting direction
+    Agent agent = agents[id];
+    vec2 forward = sense(agent, dist, 0);
+    vec2 left = sense(agent, dist, spread);
+    vec2 right = sense(agent, dist, -spread);
+    //vec2 new_dir = normalize(forward + left + right);
+    vec2 new_dir = grad(agent);
+
+    // Move and turn the agent.
+    float random = random_rate * (2 * (make_float(hash(id + frame)) - 0.5));
+    agent.direction = to_angle(new_dir) + random;
+    agent.position += to_vec(agent.direction) * speed;
+    agent.position = mod(agent.position, imageSize(in_texture));
+    agents[id] = agent;
+
+    // Last agent to write wins, but attempt to mix anyway, for fun.
+    vec4 color = imageLoad(in_texture, ivec2(agent.position));
+    color = max(color, field_mask(agent.id));
+    //color = vec4(1);
+    imageStore(out_texture, ivec2(agent.position), color);
+}
