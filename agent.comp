@@ -53,8 +53,8 @@ float to_angle(vec2 dir)
 
 vec4 field_mask(int id)
 {
-    vec4 res = vec4(-1,-1,-1,1);
-    switch (id)
+    vec4 res = vec4(-1, -1, -1, 1);
+    switch (id % 3)
     {
         case 0: res.r = 1; break;
         case 1: res.g = 1; break;
@@ -88,7 +88,7 @@ float sample_at(vec2 position, vec4 mask)
 
 vec2 grad(Agent agent)
 {
-    float delta = 1.0;
+    float delta = 0.5;
     vec4 mask = field_mask(agent.id).zxyw;
     float ndx = sample_at(agent.position + vec2(-delta, 0.0), mask);
     float dx = sample_at(agent.position + vec2(delta, 0.0), mask);
@@ -100,11 +100,11 @@ vec2 grad(Agent agent)
 void main()
 {
     // Parameters
-    uint max_agents = 2000000;
-    float spread = 1.5;
+    uint max_agents = 500000;
+    float spread = 0.1;
     float dist = 10;
-    float speed = 5.5;
-    float random_rate = 1.1;
+    float speed = 1.5;
+    float random_rate = 4.0;
 
     // Bail out
     uint id = gl_GlobalInvocationID.x;
@@ -120,7 +120,7 @@ void main()
     vec2 new_dir = grad(agent);
 
     // Move and turn the agent.
-    float random = random_rate * (2 * (make_float(hash(id + frame)) - 0.5));
+    float random = random_rate * (make_float(hash(id + frame)) - 0.5);
     agent.direction = to_angle(new_dir) + random;
     agent.position += to_vec(agent.direction) * speed;
     agent.position = mod(agent.position, imageSize(in_texture));

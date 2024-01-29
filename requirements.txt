@@ -1,4 +1,4 @@
-moderngl==5.8.2
-moderngl_window==2.4.4
-numpy==1.25.0
-PyOpenGL==3.1.7
+moderngl
+moderngl_window
+numpy
+PyOpenGL

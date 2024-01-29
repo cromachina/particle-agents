@@ -22,9 +22,8 @@ vec4 boxBlur(int size, ivec2 center)
 void main()
 {
     // Parameters
-    //float darken_rate = 0.004;
-    float darken_rate = 0.004;
-    float mix_rate = 0.9;
+    float darken_rate = 0.002;
+    float mix_rate = 0.7;
 
     // Bail out
     ivec2 center = ivec2(gl_GlobalInvocationID.xy);
